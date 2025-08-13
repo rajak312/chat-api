@@ -1,0 +1,65 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String       @id @default(auto()) @map("_id") @db.ObjectId
+  username  String       @unique
+  email     String       @unique
+  password  String
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  messages  Message[]    @relation("UserMessages")
+  chatLinks ChatParticipant[]
+}
+
+model ChatRoom {
+  id        String            @id @default(auto()) @map("_id") @db.ObjectId
+  name      String?
+  isGroup   Boolean           @default(false)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  messages  Message[]
+  users     ChatParticipant[]
+}
+
+model Message {
+  id         String     @id @default(auto()) @map("_id") @db.ObjectId
+  content    String?
+  attachment String?
+  createdAt  DateTime   @default(now())
+
+  sender     User       @relation("UserMessages", fields: [senderId], references: [id])
+  senderId   String     @db.ObjectId
+
+  chatRoom   ChatRoom   @relation(fields: [chatRoomId], references: [id])
+  chatRoomId String     @db.ObjectId
+}
+
+model ChatParticipant {
+  id         String    @id @default(auto()) @map("_id") @db.ObjectId
+  user       User      @relation(fields: [userId], references: [id])
+  userId     String    @db.ObjectId
+
+  chatRoom   ChatRoom  @relation(fields: [chatRoomId], references: [id])
+  chatRoomId String    @db.ObjectId
+
+  joinedAt   DateTime  @default(now())
+}
+
+model Session {
+  id               String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId           String   @db.ObjectId
+  refreshTokenHash String
+  lastActivity     DateTime @default(now())
+  createdAt        DateTime @default(now())
+  expiresAt        DateTime
+}
+
