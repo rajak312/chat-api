@@ -12,6 +12,8 @@ import {
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ChallengeType } from '@prisma/client';
+import { assert } from 'src/core/errors/assert';
+import { ErrorCode } from 'src/core/errors/app-error';
 
 const rpName = process.env.RP_NAME || 'My NestJS App';
 const rpID = process.env.RP_ID || 'localhost';
@@ -23,14 +25,11 @@ export class AuthService {
 
   async generateRegistrationOptions(username: string) {
     const user = await this.prisma.user.findUnique({
-      where: {
-        username,
-      },
-      include: {
-        passkeys: true,
-      },
+      where: { username },
+      include: { passkeys: true },
     });
-    if (!user) return;
+    assert(user, `User ${username} not found`, ErrorCode.USER_NOT_FOUND);
+
     const options: PublicKeyCredentialCreationOptionsJSON =
       await generateRegistrationOptions({
         rpName,
@@ -47,18 +46,16 @@ export class AuthService {
           authenticatorAttachment: 'platform',
         },
       });
+
     await this.prisma.webAuthnChallenge.create({
       data: {
         challenge: options.challenge,
         type: ChallengeType.REGISTRATION,
-        expiresAt: new Date(Date.now() + 1000 * 60 * 5),
-        user: {
-          connect: {
-            id: user.id,
-          },
-        },
+        expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+        user: { connect: { id: user.id } },
       },
     });
+
     return options;
   }
 
@@ -67,34 +64,37 @@ export class AuthService {
     response: RegistrationResponseJSON,
   ) {
     const authChallenge = await this.prisma.webAuthnChallenge.findFirst({
-      where: {
-        userId,
-        type: ChallengeType.REGISTRATION,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
+      where: { userId, type: ChallengeType.REGISTRATION },
+      orderBy: { createdAt: 'desc' },
     });
+    assert(
+      authChallenge,
+      'No registration challenge found',
+      ErrorCode.VALIDATION_ERROR,
+    );
 
-    if (!authChallenge) return;
     const user = await this.prisma.user.findUnique({
-      where: {
-        id: authChallenge.userId,
-      },
+      where: { id: authChallenge.userId },
     });
+    assert(user, `User ${userId} not found`, ErrorCode.USER_NOT_FOUND);
+
     const { verified, registrationInfo } = await verifyRegistrationResponse({
       response,
       expectedChallenge: authChallenge.challenge,
       expectedOrigin: origin,
       expectedRPID: rpID,
     });
-    if (!registrationInfo || !user) return;
+
+    assert(
+      registrationInfo,
+      'Invalid registration response',
+      ErrorCode.VALIDATION_ERROR,
+    );
+
     await this.prisma.passkey.create({
       data: {
         id: registrationInfo.credential.id,
-        user: {
-          connect: { id: user.id },
-        },
+        user: { connect: { id: user.id } },
         publicKey: registrationInfo.credential.publicKey,
         counter: registrationInfo.credential.counter,
         transports: registrationInfo.credential.transports || [],
@@ -103,6 +103,7 @@ export class AuthService {
         webAuthnUserID: user.id,
       },
     });
+
     return verified;
   }
 
@@ -111,8 +112,7 @@ export class AuthService {
       where: { username },
       include: { passkeys: true },
     });
-
-    if (!user) return null;
+    assert(user, `User ${username} not found`, ErrorCode.USER_NOT_FOUND);
 
     const options: PublicKeyCredentialRequestOptionsJSON =
       await generateAuthenticationOptions({
@@ -126,7 +126,7 @@ export class AuthService {
     await this.prisma.webAuthnChallenge.create({
       data: {
         userId: user.id,
-        type: 'AUTHENTICATION',
+        type: ChallengeType.AUTHENTICATION,
         challenge: options.challenge,
         expiresAt: new Date(Date.now() + 5 * 60 * 1000),
       },
@@ -142,39 +142,32 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { username },
     });
-    if (!user) {
-      throw new Error(`User ${username} not found`);
-    }
+    assert(user, `User ${username} not found`, ErrorCode.USER_NOT_FOUND);
+
     const authChallenge = await this.prisma.webAuthnChallenge.findFirst({
-      where: {
-        userId: user.id,
-        type: 'AUTHENTICATION',
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
+      where: { userId: user.id, type: ChallengeType.AUTHENTICATION },
+      orderBy: { createdAt: 'desc' },
     });
-    if (!authChallenge) {
-      throw new Error('No authentication challenge found');
-    }
+    assert(
+      authChallenge,
+      'No authentication challenge found',
+      ErrorCode.VALIDATION_ERROR,
+    );
 
     const passkey = await this.prisma.passkey.findFirst({
-      where: {
-        userId: user.id,
-        id: response.id,
-      },
+      where: { userId: user.id, id: response.id },
     });
-    if (!passkey) {
-      throw new Error(
-        `Could not find passkey ${response.id} for user ${user.id}`,
-      );
-    }
+    assert(
+      passkey,
+      `Could not find passkey ${response.id} for user ${user.id}`,
+      ErrorCode.PASSKEY_NOT_FOUND,
+    );
 
     const verification = await verifyAuthenticationResponse({
       response,
       expectedChallenge: authChallenge.challenge,
-      expectedOrigin: process.env.WEBAUTHN_ORIGIN!,
-      expectedRPID: process.env.WEBAUTHN_RPID!,
+      expectedOrigin: origin,
+      expectedRPID: rpID,
       credential: {
         id: passkey.id,
         publicKey: passkey.publicKey,
@@ -185,12 +178,14 @@ export class AuthService {
     });
 
     const { verified, authenticationInfo } = verification;
+
     if (verified && authenticationInfo) {
       await this.prisma.passkey.update({
         where: { id: passkey.id },
         data: { counter: authenticationInfo.newCounter },
       });
     }
+
     return { verified };
   }
 }
