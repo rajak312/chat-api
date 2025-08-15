@@ -7,7 +7,11 @@ import type {
   AuthenticationResponseJSON,
 } from '@simplewebauthn/server';
 import type { Response } from 'express';
-import { LoginUserPayload, RegisterUserPayload } from './auth.dto';
+import {
+  GenerateWebAuthnOptions,
+  LoginUserPayload,
+  RegisterUserPayload,
+} from './auth.dto';
 import ms from 'ms';
 
 @Controller('auth')
@@ -16,9 +20,9 @@ export class AuthController {
 
   @Post('register/options')
   async generateRegistrationOptions(
-    @Body('username') username: string,
+    @Body() body: GenerateWebAuthnOptions,
   ): Promise<PublicKeyCredentialCreationOptionsJSON> {
-    return this.authService.generateRegistrationOptions(username);
+    return this.authService.generateRegistrationOptions(body.username);
   }
 
   @Post('register/verify/:userId')
@@ -31,9 +35,9 @@ export class AuthController {
 
   @Post('authenticate/options')
   async generateAuthenticationOptions(
-    @Body('username') username: string,
+    @Body() body: GenerateWebAuthnOptions,
   ): Promise<PublicKeyCredentialRequestOptionsJSON> {
-    return this.authService.generateAuthenticationOptions(username);
+    return this.authService.generateAuthenticationOptions(body.username);
   }
 
   @Post('authenticate/verify')

@@ -44,3 +44,8 @@ export class LoginUserPayload {
   @IsString()
   password: string;
 }
+
+export class GenerateWebAuthnOptions {
+  @ApiProperty({ description: 'Username of the user to register' })
+  username: string;
+}
