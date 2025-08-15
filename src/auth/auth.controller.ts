@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Param, Res } from '@nestjs/common';
+import { Controller, Post, Body, Param, Res, Req } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import type {
   PublicKeyCredentialCreationOptionsJSON,
@@ -6,13 +6,14 @@ import type {
   RegistrationResponseJSON,
   AuthenticationResponseJSON,
 } from '@simplewebauthn/server';
-import type { Response } from 'express';
+import type { Response, Request } from 'express';
 import {
   GenerateWebAuthnOptions,
   LoginUserPayload,
   RegisterUserPayload,
 } from './auth.dto';
 import ms from 'ms';
+import { Authenticate } from 'src/decorators/authenticate.decorator';
 
 @Controller('auth')
 export class AuthController {
@@ -84,5 +85,19 @@ export class AuthController {
     return {
       message: 'login sucessfully',
     };
+  }
+
+  @Authenticate()
+  @Post('logout')
+  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const sessionId = req.cookies['session_id'];
+    await this.authService.logout(sessionId);
+    res.clearCookie('session_id', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    });
+
+    return { message: 'Logged out successfully' };
   }
 }

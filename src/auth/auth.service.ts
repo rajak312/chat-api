@@ -262,6 +262,14 @@ export class AuthService {
     return { sessionId: session.id };
   }
 
+  async logout(sessionId: string) {
+    await this.prisma.session.delete({
+      where: {
+        id: sessionId,
+      },
+    });
+  }
+
   private async createSession(userId: string) {
     return await this.prisma.session.create({
       data: {
