@@ -58,15 +58,7 @@ export class AuthController {
     @Body() body: LoginUserPayload,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const { accessToken, refreshToken, sessionId } =
-      await this.authService.login(body);
-
-    res.cookie('refresh_token', refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-      maxAge: ms(process.env.REFRESH_TOKEN_TTL),
-    });
+    const { sessionId } = await this.authService.login(body);
 
     res.cookie('session_id', sessionId, {
       httpOnly: true,
@@ -75,6 +67,8 @@ export class AuthController {
       maxAge: ms(process.env.INACTIVITY_MAX_MS),
     });
 
-    return { accessToken };
+    return {
+      message: 'login sucessfully',
+    };
   }
 }

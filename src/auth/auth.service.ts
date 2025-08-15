@@ -242,43 +242,29 @@ export class AuthService {
 
   async login(payload: LoginUserPayload) {
     const user = await this.prisma.user.findUnique({
-      where: {
-        username: payload.username,
-      },
+      where: { username: payload.username },
     });
-    assert(user, 'invalid credentials', ErrorCode.INVALID_CREDENTIALS);
-    assert(user.password, 'invalid credentials', ErrorCode.INVALID_CREDENTIALS);
-    const isPasswordValid = bcrypt.compare(payload.password, user?.password);
+    assert(user, 'Invalid credentials', ErrorCode.INVALID_CREDENTIALS);
+    assert(user.password, 'Invalid credentials', ErrorCode.INVALID_CREDENTIALS);
+    const isPasswordValid = await bcrypt.compare(
+      payload.password,
+      user.password,
+    );
     assert(
       isPasswordValid,
-      'invalid credentials',
+      'Invalid credentials',
       ErrorCode.INVALID_CREDENTIALS,
     );
-    return this.generateTokens(user.id, user.username);
-  }
 
-  private async generateTokens(userId: string, username: string) {
-    const payload = { sub: userId, username };
-
-    const accessToken = this.jwt.sign(payload, {
-      secret: process.env.ACCESS_TOKEN_SECRET,
-      expiresIn: process.env.ACCESS_TOKEN_TTL,
-    });
-
-    const refreshToken = this.jwt.sign(payload, {
-      secret: process.env.REFRESH_TOKEN_SECRET,
-      expiresIn: process.env.REFRESH_TOKEN_TTL,
-    });
-
-    const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
     const session = await this.prisma.session.create({
       data: {
-        userId,
-        refreshToken: hashedRefreshToken,
-        expiresAt: new Date(Date.now() + ms(process.env.REFRESH_TOKEN_TTL)),
+        userId: user.id,
+        lastActivity: new Date(),
+        expiresAt: new Date(
+          Date.now() + ms(process.env.SESSION_INACTIVITY_TIMEOUT || '30m'),
+        ),
       },
     });
-
-    return { accessToken, refreshToken, sessionId: session.id };
+    return { sessionId: session.id };
   }
 }

@@ -18,10 +18,13 @@ export class SessionGuard implements CanActivate {
 
     const session = await this.prisma.session.findUnique({
       where: { id: sessionId },
+      include: {
+        user: true,
+      },
     });
     if (!session) throw new UnauthorizedException('Session not found');
 
-    const timeout = ms(process.env.SESSION_INACTIVITY_TIMEOUT);
+    const timeout = ms(process.env.INACTIVITY_MAX_MS);
     if (Date.now() - session.lastActivity.getTime() > timeout) {
       await this.prisma.session.delete({ where: { id: sessionId } });
       throw new UnauthorizedException('Session expired due to inactivity');
@@ -31,6 +34,8 @@ export class SessionGuard implements CanActivate {
       where: { id: sessionId },
       data: { lastActivity: new Date() },
     });
+
+    req.user = session.user;
 
     return true;
   }
