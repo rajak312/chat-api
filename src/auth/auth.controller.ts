@@ -44,8 +44,22 @@ export class AuthController {
   async verifyAuthenticationResponse(
     @Param('username') username: string,
     @Body() body: AuthenticationResponseJSON,
+    @Res({ passthrough: true }) res: Response,
   ) {
-    return this.authService.verifyAuthenticationResponseMethod(username, body);
+    const { verified, sessionId } =
+      await this.authService.verifyAuthenticationResponseMethod(username, body);
+    if (verified) {
+      res.cookie('session_id', sessionId, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+        maxAge: ms(process.env.INACTIVITY_MAX_MS),
+      });
+    }
+
+    return {
+      message: 'login sucessfully',
+    };
   }
 
   @Post('register')

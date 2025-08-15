@@ -192,7 +192,9 @@ export class AuthService {
       });
     }
 
-    return { verified };
+    const session = await this.createSession(user.id);
+
+    return { verified, sessionId: session.id };
   }
 
   async register(payload: RegisterUserPayload) {
@@ -256,15 +258,19 @@ export class AuthService {
       ErrorCode.INVALID_CREDENTIALS,
     );
 
-    const session = await this.prisma.session.create({
+    const session = await this.createSession(user.id);
+    return { sessionId: session.id };
+  }
+
+  private async createSession(userId: string) {
+    return await this.prisma.session.create({
       data: {
-        userId: user.id,
+        userId,
         lastActivity: new Date(),
         expiresAt: new Date(
           Date.now() + ms(process.env.SESSION_INACTIVITY_TIMEOUT || '30m'),
         ),
       },
     });
-    return { sessionId: session.id };
   }
 }
