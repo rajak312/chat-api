@@ -7,6 +7,36 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// prisma/schema.prisma (add/extend these)
+
+// A physical/logical client (browser tab / device) that holds keys
+model Device {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  user         User     @relation(fields: [userId], references: [id])
+  userId       String   @db.ObjectId
+  name         String?
+  createdAt    DateTime @default(now())
+  // Identity & prekeys (Signal/X3DH-style)
+  identityKey  String // base64/hex public key
+  signedPreKey String // public key
+  spkSignature String // signature over signedPreKey by identityKey
+  enabled      Boolean  @default(true)
+
+  // One-time prekeys issued for session establishment (server only stores PUBLIC)
+  oneTimePreKeys OneTimePreKey[]
+}
+
+// One-time prekeys pool (public) for this device
+model OneTimePreKey {
+  id        String  @id @default(auto()) @map("_id") @db.ObjectId
+  device    Device  @relation(fields: [deviceId], references: [id])
+  deviceId  String  @db.ObjectId
+  keyId     Int // client-generated id
+  publicKey String // base64/hex public key
+  consumed  Boolean @default(false)
+}
+
+// Users — unchanged except we’ll remove plaintext usage
 model User {
   id          String   @id @default(auto()) @map("_id") @db.ObjectId
   username    String   @unique
@@ -24,8 +54,11 @@ model User {
 
   roomUsers    RoomUser[]
   messagesSeen MessageSeen[]
+
+  devices Device[]
 }
 
+// Rooms and membership (unchanged)
 model Room {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   name      String
@@ -36,31 +69,51 @@ model Room {
   messages  Message[]
 }
 
+// Membership + per-member encrypted room key envelope (for groups)
 model RoomUser {
   id     String @id @default(auto()) @map("_id") @db.ObjectId
   user   User   @relation(fields: [userId], references: [id])
   userId String @db.ObjectId
   room   Room   @relation(fields: [roomId], references: [id])
   roomId String @db.ObjectId
+
+  // The room symmetric key (RSK) encrypted for THIS member’s device identity key.
+  // If user has multiple devices, store one envelope per device (or a latest only policy).
+  encryptedRoomKey String? // base64 (ciphertext)
+  keyEnvelopeIV    String? // IV/nonce if using AEAD
+  keyEnvelopeTag   String? // auth tag if using AES-GCM
+  keyEnvelopeAlg   String? // metadata e.g. 'x25519-aesgcm'
+  deviceId         String? @db.ObjectId // which device this envelope targets (optional)
 }
 
+// Message now stores OPAQUE ENCRYPTED PAYLOAD ONLY
 model Message {
-  id        String        @id @default(auto()) @map("_id") @db.ObjectId
-  content   String
-  sender    User          @relation(fields: [senderId], references: [id])
-  senderId  String        @db.ObjectId
-  room      Room          @relation(fields: [roomId], references: [id])
-  roomId    String        @db.ObjectId
-  createdAt DateTime      @default(now())
-  seenBy    MessageSeen[]
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  room        Room     @relation(fields: [roomId], references: [id])
+  roomId      String   @db.ObjectId
+  sender      User     @relation(fields: [senderId], references: [id])
+  senderId    String   @db.ObjectId
+  // E2EE payload
+  ciphertext  String // base64 ciphertext blob (could include header for double-ratchet)
+  iv          String? // if using AES-GCM for group RSK mode
+  authTag     String? // if using AES-GCM
+  // Optional metadata that is safe to leak (not confidential)
+  contentType String? // 'text', 'image', 'file', etc. (client chooses)
+  version     String? // protocol versioning for migrations
+  createdAt   DateTime @default(now())
+
+  // Explicit many-to-many for read receipts
+  seenBy MessageSeen[]
 }
 
+// Read receipt mapping
 model MessageSeen {
-  id        String  @id @default(auto()) @map("_id") @db.ObjectId
-  user      User    @relation(fields: [userId], references: [id])
-  userId    String  @db.ObjectId
-  message   Message @relation(fields: [messageId], references: [id])
-  messageId String  @db.ObjectId
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String   @db.ObjectId
+  message   Message  @relation(fields: [messageId], references: [id])
+  messageId String   @db.ObjectId
+  at        DateTime @default(now())
 }
 
 model Session {
