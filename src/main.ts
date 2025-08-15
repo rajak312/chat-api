@@ -4,7 +4,11 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  const allowedOrigins = ['http://localhost:3000', process.env.WEB_APP_ORIGIN];
+  const allowedOrigins = [
+    'http://localhost:3000',
+    process.env.WEB_APP_ORIGIN,
+    'https://chat-sable-six.vercel.app',
+  ];
   app.enableCors({
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
