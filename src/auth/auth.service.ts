@@ -67,11 +67,15 @@ export class AuthService {
   }
 
   async verifyRegistrationResponse(
-    userId: string,
+    username: string,
     response: RegistrationResponseJSON,
   ) {
+    const user = await this.prisma.user.findUnique({
+      where: { username },
+    });
+    assert(user, `User ${username} not found`, ErrorCode.USER_NOT_FOUND);
     const authChallenge = await this.prisma.webAuthnChallenge.findFirst({
-      where: { userId, type: ChallengeType.REGISTRATION },
+      where: { userId: user.id, type: ChallengeType.REGISTRATION },
       orderBy: { createdAt: 'desc' },
     });
     assert(
@@ -79,11 +83,6 @@ export class AuthService {
       'No registration challenge found',
       ErrorCode.VALIDATION_ERROR,
     );
-
-    const user = await this.prisma.user.findUnique({
-      where: { id: authChallenge.userId },
-    });
-    assert(user, `User ${userId} not found`, ErrorCode.USER_NOT_FOUND);
 
     const { verified, registrationInfo } = await verifyRegistrationResponse({
       response,

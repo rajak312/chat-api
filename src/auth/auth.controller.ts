@@ -25,12 +25,12 @@ export class AuthController {
     return this.authService.generateRegistrationOptions(body.username);
   }
 
-  @Post('register/verify/:userId')
+  @Post('register/verify/:username')
   async verifyRegistrationResponse(
-    @Param('userId') userId: string,
+    @Param('username') username: string,
     @Body() body: RegistrationResponseJSON,
   ) {
-    return this.authService.verifyRegistrationResponse(userId, body);
+    return this.authService.verifyRegistrationResponse(username, body);
   }
 
   @Post('authenticate/options')
