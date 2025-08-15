@@ -3,9 +3,12 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
+import { CryptoModule } from './crypto/crypto.module';
+import { MessagesModule } from './messages/messages.module';
+import { RoomsModule } from './rooms/rooms.module';
 
 @Module({
-  imports: [AuthModule, UsersModule],
+  imports: [AuthModule, UsersModule, CryptoModule, MessagesModule, RoomsModule],
   controllers: [AppController],
   providers: [AppService],
 })
