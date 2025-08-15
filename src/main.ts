@@ -5,7 +5,10 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.enableCors({
-    origin: process.env.WEB_APP_ORIGIN || 'http://localhost:3000',
+    origin: [
+      process.env.WEB_APP_ORIGIN || 'http://localhost:3000',
+      'https://chat-sable-six.vercel.app/',
+    ],
     credentials: true,
   });
   const config = new DocumentBuilder()

@@ -40,9 +40,9 @@ export class AuthController {
     return this.authService.generateAuthenticationOptions(body.username);
   }
 
-  @Post('authenticate/verify')
+  @Post('authenticate/verify/:username')
   async verifyAuthenticationResponse(
-    @Body('username') username: string,
+    @Param('username') username: string,
     @Body() body: AuthenticationResponseJSON,
   ) {
     return this.authService.verifyAuthenticationResponseMethod(username, body);
