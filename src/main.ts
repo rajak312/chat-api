@@ -4,7 +4,11 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-    const config = new DocumentBuilder()
+  app.enableCors({
+    origin: process.env.WEB_APP_ORIGIN || 'http://localhost:3000',
+    credentials: true,
+  });
+  const config = new DocumentBuilder()
     .setTitle('API Documentation')
     .setDescription('Chat Api')
     .setVersion('1.0.o')

@@ -14,6 +14,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ChallengeType } from '@prisma/client';
 import { assert } from 'src/core/errors/assert';
 import { ErrorCode } from 'src/core/errors/app-error';
+import { JwtService } from '@nestjs/jwt';
+import bcrypt from 'bcrypt';
+import { LoginUserPayload, RegisterUserPayload } from './auth.dto';
+import ms from 'ms';
 
 const rpName = process.env.RP_NAME || 'My NestJS App';
 const rpID = process.env.RP_ID || 'localhost';
@@ -21,7 +25,10 @@ const origin = process.env.WEB_APP_ORIGIN || 'http://localhost:3000';
 
 @Injectable()
 export class AuthService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private jwt: JwtService,
+  ) {}
 
   async generateRegistrationOptions(username: string) {
     const user = await this.prisma.user.findUnique({
@@ -187,5 +194,92 @@ export class AuthService {
     }
 
     return { verified };
+  }
+
+  async register(payload: RegisterUserPayload) {
+    const { username, email, phoneNumber, password } = payload;
+    const existingUsername = await this.prisma.user.findUnique({
+      where: { username },
+    });
+    assert(
+      !existingUsername,
+      'Username already exists',
+      ErrorCode.USER_ALREADY_EXISTS,
+    );
+    if (email) {
+      const existingEmail = await this.prisma.user.findUnique({
+        where: { email },
+      });
+      assert(
+        !existingEmail,
+        'Email already exists',
+        ErrorCode.EMAIL_ALREADY_EXISTS,
+      );
+    }
+
+    if (phoneNumber) {
+      const existingPhone = await this.prisma.user.findUnique({
+        where: { phoneNumber },
+      });
+      assert(
+        !existingPhone,
+        'Phone number already exists',
+        ErrorCode.PHONE_ALREADY_EXISTS,
+      );
+    }
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await this.prisma.user.create({
+      data: {
+        username,
+        email,
+        phoneNumber,
+        password: hashedPassword,
+      },
+    });
+    return {
+      message: 'user register successfully',
+    };
+  }
+
+  async login(payload: LoginUserPayload) {
+    const user = await this.prisma.user.findUnique({
+      where: {
+        username: payload.username,
+      },
+    });
+    assert(user, 'invalid credentials', ErrorCode.INVALID_CREDENTIALS);
+    assert(user.password, 'invalid credentials', ErrorCode.INVALID_CREDENTIALS);
+    const isPasswordValid = bcrypt.compare(payload.password, user?.password);
+    assert(
+      isPasswordValid,
+      'invalid credentials',
+      ErrorCode.INVALID_CREDENTIALS,
+    );
+    return this.generateTokens(user.id, user.username);
+  }
+
+  private async generateTokens(userId: string, username: string) {
+    const payload = { sub: userId, username };
+
+    const accessToken = this.jwt.sign(payload, {
+      secret: process.env.ACCESS_TOKEN_SECRET,
+      expiresIn: process.env.ACCESS_TOKEN_TTL,
+    });
+
+    const refreshToken = this.jwt.sign(payload, {
+      secret: process.env.REFRESH_TOKEN_SECRET,
+      expiresIn: process.env.REFRESH_TOKEN_TTL,
+    });
+
+    const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
+    const session = await this.prisma.session.create({
+      data: {
+        userId,
+        refreshToken: hashedRefreshToken,
+        expiresAt: new Date(Date.now() + ms(process.env.REFRESH_TOKEN_TTL)),
+      },
+    });
+
+    return { accessToken, refreshToken, sessionId: session.id };
   }
 }

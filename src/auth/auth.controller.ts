@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Param } from '@nestjs/common';
+import { Controller, Post, Body, Param, Res } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import type {
   PublicKeyCredentialCreationOptionsJSON,
@@ -6,6 +6,9 @@ import type {
   RegistrationResponseJSON,
   AuthenticationResponseJSON,
 } from '@simplewebauthn/server';
+import type { Response } from 'express';
+import { LoginUserPayload, RegisterUserPayload } from './auth.dto';
+import ms from 'ms';
 
 @Controller('auth')
 export class AuthController {
@@ -39,5 +42,35 @@ export class AuthController {
     @Body() body: AuthenticationResponseJSON,
   ) {
     return this.authService.verifyAuthenticationResponseMethod(username, body);
+  }
+
+  @Post('register')
+  async register(@Body() body: RegisterUserPayload) {
+    return this.authService.register(body);
+  }
+
+  @Post('login')
+  async login(
+    @Body() body: LoginUserPayload,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { accessToken, refreshToken, sessionId } =
+      await this.authService.login(body);
+
+    res.cookie('refresh_token', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      maxAge: ms(process.env.REFRESH_TOKEN_TTL),
+    });
+
+    res.cookie('session_id', sessionId, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      maxAge: ms(process.env.INACTIVITY_MAX_MS),
+    });
+
+    return { accessToken };
   }
 }
