@@ -17,10 +17,15 @@ export enum ErrorCode {
   VALIDATION_ERROR = 'VALIDATION_ERROR',
   MISSING_REQUIRED_FIELDS = 'MISSING_REQUIRED_FIELDS',
   INVALID_INPUT = 'INVALID_INPUT',
+  BAD_REQUEST = 'BAD_REQUEST',
 
   // Resource Errors
   RESOURCE_NOT_FOUND = 'RESOURCE_NOT_FOUND',
   RESOURCE_ALREADY_EXISTS = 'RESOURCE_ALREADY_EXISTS',
+  CONNECTION_NOT_FOUND = 'CONNECTION_NOT_FOUND',
+
+  // WebSocket / Realtime Errors
+  WS_NOT_CONNECTED = 'WS_NOT_CONNECTED',
 
   // Server & System
   SERVER_ERROR = 'SERVER_ERROR',
@@ -31,7 +36,7 @@ export enum ErrorCode {
 export const ErrorHttpStatus: Record<ErrorCode, number> = {
   // Auth & User Errors
   [ErrorCode.USER_NOT_FOUND]: 404,
-  [ErrorCode.USER_ALREADY_EXISTS]: 409, // Conflict
+  [ErrorCode.USER_ALREADY_EXISTS]: 409,
   [ErrorCode.INVALID_CREDENTIALS]: 401,
   [ErrorCode.EMAIL_ALREADY_EXISTS]: 409,
   [ErrorCode.PHONE_ALREADY_EXISTS]: 409,
@@ -43,16 +48,21 @@ export const ErrorHttpStatus: Record<ErrorCode, number> = {
   [ErrorCode.PASSKEY_ALREADY_EXISTS]: 409,
   [ErrorCode.PASSKEY_VERIFICATION_FAILED]: 400,
 
-  // Validation
+  // Validation & Input
   [ErrorCode.VALIDATION_ERROR]: 400,
   [ErrorCode.MISSING_REQUIRED_FIELDS]: 400,
   [ErrorCode.INVALID_INPUT]: 400,
+  [ErrorCode.BAD_REQUEST]: 400,
 
-  // Resource
+  // Resource Errors
   [ErrorCode.RESOURCE_NOT_FOUND]: 404,
   [ErrorCode.RESOURCE_ALREADY_EXISTS]: 409,
+  [ErrorCode.CONNECTION_NOT_FOUND]: 404,
 
-  // Server
+  // WebSocket / Realtime
+  [ErrorCode.WS_NOT_CONNECTED]: 400,
+
+  // Server & System
   [ErrorCode.SERVER_ERROR]: 500,
   [ErrorCode.DATABASE_ERROR]: 500,
   [ErrorCode.SERVICE_UNAVAILABLE]: 503,

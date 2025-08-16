@@ -55,7 +55,24 @@ model User {
   roomUsers    RoomUser[]
   messagesSeen MessageSeen[]
 
-  devices Device[]
+  devices    Device[]
+  Connection Connection[]
+
+  connections Connection[] @relation("UserConnections")
+  connectedBy Connection[] @relation("ConnectedUserConnections")
+}
+
+model Connection {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String   @db.ObjectId
+  connectedUserId String   @db.ObjectId
+  createdAt       DateTime @default(now())
+
+  user          User @relation("UserConnections", fields: [userId], references: [id])
+  connectedUser User @relation("ConnectedUserConnections", fields: [connectedUserId], references: [id])
+  User          User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, connectedUserId])
 }
 
 // Rooms and membership (unchanged)
