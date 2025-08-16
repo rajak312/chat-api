@@ -5,10 +5,12 @@ import { PrismaService } from 'src/prisma/prisma.service';
 export class MessagesService {
   constructor(private prisma: PrismaService) {}
 
+  // Send message to room or connection
   async send(
-    roomId: string,
     senderId: string,
     dto: {
+      roomId?: string;
+      connectionId?: string;
       ciphertext: string;
       iv?: string;
       authTag?: string;
@@ -16,14 +18,33 @@ export class MessagesService {
       version?: string;
     },
   ) {
-    const member = await this.prisma.roomUser.findFirst({
-      where: { roomId, userId: senderId },
-    });
-    if (!member) throw new ForbiddenException('Not in room');
+    if (!dto.roomId && !dto.connectionId) {
+      throw new ForbiddenException(
+        'Either roomId or connectionId must be provided',
+      );
+    }
+    if (dto.roomId) {
+      const member = await this.prisma.roomUser.findFirst({
+        where: { roomId: dto.roomId, userId: senderId },
+      });
+      if (!member) throw new ForbiddenException('Not in room');
+    }
+
+    // Validate direct connection
+    if (dto.connectionId) {
+      const connection = await this.prisma.connection.findFirst({
+        where: {
+          id: dto.connectionId,
+          OR: [{ userId: senderId }, { connectedUserId: senderId }],
+        },
+      });
+      if (!connection) throw new ForbiddenException('Not in connection');
+    }
 
     return this.prisma.message.create({
       data: {
-        roomId,
+        roomId: dto.roomId ?? null,
+        connectionId: dto.connectionId ?? null,
         senderId,
         ciphertext: dto.ciphertext,
         iv: dto.iv ?? null,
@@ -38,14 +59,41 @@ export class MessagesService {
     });
   }
 
-  async history(roomId: string, userId: string, cursor?: string, limit = 20) {
-    const member = await this.prisma.roomUser.findFirst({
-      where: { roomId, userId },
-    });
-    if (!member) throw new ForbiddenException('Not in room');
+  async history(
+    userId: string,
+    roomId?: string,
+    connectionId?: string,
+    cursor?: string,
+    limit = 20,
+  ) {
+    if (!roomId && !connectionId) {
+      throw new ForbiddenException(
+        'Either roomId or connectionId must be provided',
+      );
+    }
+
+    if (roomId) {
+      const member = await this.prisma.roomUser.findFirst({
+        where: { roomId, userId },
+      });
+      if (!member) throw new ForbiddenException('Not in room');
+    }
+
+    if (connectionId) {
+      const connection = await this.prisma.connection.findFirst({
+        where: {
+          id: connectionId,
+          OR: [{ userId }, { connectedUserId: userId }],
+        },
+      });
+      if (!connection) throw new ForbiddenException('Not in connection');
+    }
 
     return this.prisma.message.findMany({
-      where: { roomId },
+      where: {
+        roomId: roomId ?? null,
+        connectionId: connectionId ?? null,
+      },
       include: {
         sender: { select: { id: true, username: true } },
         seenBy: true,
@@ -57,7 +105,6 @@ export class MessagesService {
   }
 
   async markSeen(messageId: string, userId: string) {
-    // idempotency: ignore duplicate (unique compound could be added in a custom layer)
     const exists = await this.prisma.messageSeen.findFirst({
       where: { messageId, userId },
     });

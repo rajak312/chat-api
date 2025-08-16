@@ -115,10 +115,15 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         data: { messageId: data.messageId, userId: client.data.user.id },
       });
     }
+
     const msg = await this.prisma.message.findUnique({
       where: { id: data.messageId },
       include: { seenBy: true },
     });
-    if (msg) this.server.to(msg.roomId).emit('message_seen', msg);
+
+    const targetId = msg?.roomId ?? msg?.connectionId;
+    if (targetId) {
+      this.server.to(targetId).emit('message_seen', msg);
+    }
   }
 }
