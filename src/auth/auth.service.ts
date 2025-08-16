@@ -109,8 +109,10 @@ export class AuthService {
         webAuthnUserID: user.id,
       },
     });
-
-    return verified;
+    return {
+      message: 'passkey registered successfully',
+      verified,
+    };
   }
 
   async generateAuthenticationOptions(username: string) {
