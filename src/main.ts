@@ -5,7 +5,10 @@ import cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
   app.use(cookieParser());
+
+  // cors config
   const allowedOrigins = [
     'http://localhost:3000',
     'https://chat-sable-six.vercel.app',
@@ -24,12 +27,13 @@ async function bootstrap() {
     },
     credentials: true,
   });
+
+  // swagger config
   const config = new DocumentBuilder()
     .setTitle('API Documentation')
     .setDescription('Chat Api')
-    .setVersion('1.0.o')
-    .addBearerAuth()
-    .addCookieAuth('session_id')
+    .setVersion('1.0.0')
+    .addCookieAuth('connect.sid') // default name used by express-session
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

@@ -2,35 +2,45 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsNumber, IsOptional, IsString } from 'class-validator';
 
 export class SendMessageDto {
-  @IsOptional()
-  @IsString()
-  @ApiPropertyOptional({ description: 'Room ID for group chat' })
-  roomId?: string;
-
-  @IsOptional()
-  @IsString()
-  @ApiPropertyOptional({ description: 'Connection ID for 1-to-1 chat' })
-  connectionId?: string;
-
   @IsString()
   @ApiProperty({ description: 'Encrypted message text' })
   ciphertext!: string;
 
+  @IsString()
+  @ApiProperty({ description: 'sender device id' })
+  recipientDeviceId: string;
+
   @IsOptional()
   @IsString()
+  @ApiPropertyOptional({ description: 'Initialization vector for encryption' })
   iv?: string;
 
   @IsOptional()
   @IsString()
+  @ApiPropertyOptional({ description: 'Authentication tag for encryption' })
   authTag?: string;
 
   @IsOptional()
   @IsString()
+  @ApiPropertyOptional({ description: 'Type of message content' })
   contentType?: string;
 
   @IsOptional()
   @IsString()
+  @ApiPropertyOptional({ description: 'Version of encryption' })
   version?: string;
+
+  @IsOptional()
+  @IsString()
+  @ApiPropertyOptional({ description: 'Room ID or connection Id' })
+  id: string;
+
+  @IsOptional()
+  @IsString()
+  @ApiPropertyOptional({
+    description: 'Sender ephemeral public key for session encryption',
+  })
+  senderEphemeralPublic?: string;
 }
 
 export class HistoryQueryDto {
@@ -43,16 +53,10 @@ export class HistoryQueryDto {
   @IsOptional()
   @IsNumber()
   limit?: number;
+}
 
-  @ApiPropertyOptional({ description: 'Room ID if fetching room messages' })
-  @IsOptional()
+export class MessageSeenDto {
   @IsString()
-  roomId?: string;
-
-  @ApiPropertyOptional({
-    description: 'Connection ID if fetching direct messages',
-  })
-  @IsOptional()
-  @IsString()
-  connectionId?: string;
+  @ApiProperty({ description: 'ID of the message being marked as seen' })
+  messageId!: string;
 }

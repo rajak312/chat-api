@@ -1,117 +1,141 @@
-import { Injectable, ForbiddenException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { Server } from 'socket.io';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { SendMessageDto } from './messages.dtos';
+import { assert } from 'src/core/errors/assert';
+import { ErrorCode } from 'src/core/errors/app-error';
 
 @Injectable()
 export class MessagesService {
+  private io: Server;
+
   constructor(private prisma: PrismaService) {}
 
-  // Send message to room or connection
-  async send(
-    senderId: string,
-    dto: {
-      roomId?: string;
-      connectionId?: string;
-      ciphertext: string;
-      iv?: string;
-      authTag?: string;
-      contentType?: string;
-      version?: string;
-    },
-  ) {
-    if (!dto.roomId && !dto.connectionId) {
-      throw new ForbiddenException(
-        'Either roomId or connectionId must be provided',
-      );
-    }
-    if (dto.roomId) {
-      const member = await this.prisma.roomUser.findFirst({
-        where: { roomId: dto.roomId, userId: senderId },
-      });
-      if (!member) throw new ForbiddenException('Not in room');
-    }
+  setServer(io: Server) {
+    this.io = io;
+  }
 
-    // Validate direct connection
-    if (dto.connectionId) {
-      const connection = await this.prisma.connection.findFirst({
-        where: {
-          id: dto.connectionId,
-          OR: [{ userId: senderId }, { connectedUserId: senderId }],
-        },
-      });
-      if (!connection) throw new ForbiddenException('Not in connection');
-    }
+  async send(senderId: string, targetId: string, dto: SendMessageDto) {
+    assert(targetId, 'invalid input', ErrorCode.INVALID_INPUT);
 
-    return this.prisma.message.create({
+    console.log('CAlling Sedn', senderId);
+
+    const roomMember = await this.prisma.roomUser.findFirst({
+      where: {
+        userId: senderId,
+        ...(dto.id ? { roomId: dto.id } : {}),
+      },
+    });
+    const connection = await this.prisma.connection.findFirst({
+      where: {
+        id: dto.id ?? targetId,
+        OR: [{ userId: senderId }, { connectedUserId: senderId }],
+      },
+    });
+
+    assert(
+      roomMember || connection,
+      'Not in connection/room',
+      ErrorCode.NOT_FOUND,
+    );
+
+    // Create message
+    const message = await this.prisma.message.create({
       data: {
-        roomId: dto.roomId ?? null,
-        connectionId: dto.connectionId ?? null,
+        roomId: dto.id ?? null,
+        connectionId: dto.id ?? null,
         senderId,
         ciphertext: dto.ciphertext,
+        senderEphemeralPublic: dto.senderEphemeralPublic,
         iv: dto.iv ?? null,
         authTag: dto.authTag ?? null,
         contentType: dto.contentType ?? null,
         version: dto.version ?? 'v1',
+        recipientDeviceId: dto.recipientDeviceId,
       },
       include: {
         sender: { select: { id: true, username: true } },
         seenBy: true,
       },
     });
+
+    if (this.io) {
+      const broadcastId = dto.id ?? dto.id ?? targetId;
+      this.io.to(broadcastId).emit('receive_message', message);
+    }
+
+    return message;
   }
 
   async history(
     userId: string,
-    roomId?: string,
-    connectionId?: string,
+    targetId: string,
+    deviceId?: string,
     cursor?: string,
     limit = 20,
   ) {
-    if (!roomId && !connectionId) {
-      throw new ForbiddenException(
-        'Either roomId or connectionId must be provided',
-      );
-    }
+    assert(targetId, 'invalid input', ErrorCode.INVALID_INPUT);
+    assert(deviceId, 'please send your deviceId', ErrorCode.INVALID_INPUT);
+    const roomMember = await this.prisma.roomUser.findFirst({
+      where: { roomId: targetId, userId },
+    });
+    const connection = await this.prisma.connection.findFirst({
+      where: {
+        id: targetId,
+        OR: [{ userId }, { connectedUserId: userId }],
+      },
+    });
 
-    if (roomId) {
-      const member = await this.prisma.roomUser.findFirst({
-        where: { roomId, userId },
-      });
-      if (!member) throw new ForbiddenException('Not in room');
-    }
+    assert(
+      roomMember || connection,
+      'Not in connection/room',
+      ErrorCode.NOT_FOUND,
+    );
 
-    if (connectionId) {
-      const connection = await this.prisma.connection.findFirst({
-        where: {
-          id: connectionId,
-          OR: [{ userId }, { connectedUserId: userId }],
-        },
-      });
-      if (!connection) throw new ForbiddenException('Not in connection');
-    }
+    console.log('id', deviceId);
 
     return this.prisma.message.findMany({
       where: {
-        roomId: roomId ?? null,
-        connectionId: connectionId ?? null,
+        AND: [
+          { OR: [{ roomId: targetId }, { connectionId: targetId }] },
+          {
+            OR: [{ recipientDeviceId: deviceId }, { senderId: userId }],
+          },
+        ],
       },
       include: {
         sender: { select: { id: true, username: true } },
         seenBy: true,
       },
       orderBy: { createdAt: 'desc' },
-      take: limit,
+      take: typeof limit === 'string' ? parseInt(limit) : limit,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     });
   }
 
+  // Mark a message as seen
   async markSeen(messageId: string, userId: string) {
-    const exists = await this.prisma.messageSeen.findFirst({
+    const existing = await this.prisma.messageSeen.findFirst({
       where: { messageId, userId },
     });
-    if (exists) return exists;
+    if (existing) return existing;
 
-    return this.prisma.messageSeen.create({
+    const seen = await this.prisma.messageSeen.create({
       data: { messageId, userId },
     });
+
+    // Emit WebSocket event
+    if (this.io) {
+      const message = await this.prisma.message.findUnique({
+        where: { id: messageId },
+        include: { seenBy: true },
+      });
+      const targetId = message?.roomId ?? message?.connectionId;
+      if (targetId) {
+        this.io.to(targetId).emit('message_seen', message);
+      }
+    }
+
+    return seen;
   }
 }

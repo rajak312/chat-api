@@ -57,8 +57,6 @@ export class ChatService {
       createdAt: ru.room.messages[0]?.createdAt ?? ru.room.createdAt,
     }));
 
-    console.log(connectionChats, groupChats);
-
     const chats = [...connectionChats, ...groupChats].sort((a, b) => {
       const aDate = a.createdAt ?? new Date(0);
       const bDate = b.createdAt ?? new Date(0);
@@ -79,5 +77,14 @@ export class ChatService {
       select: { id: true },
     });
     return users.map((u) => u.id);
+  }
+
+  async getSessionById(sessionId: string) {
+    return this.prisma.session.findUnique({
+      where: { id: sessionId },
+      include: {
+        user: true,
+      },
+    });
   }
 }

@@ -31,6 +31,9 @@ export enum ErrorCode {
   SERVER_ERROR = 'SERVER_ERROR',
   DATABASE_ERROR = 'DATABASE_ERROR',
   SERVICE_UNAVAILABLE = 'SERVICE_UNAVAILABLE',
+
+  // common
+  NOT_FOUND = 'NOT_FOUND',
 }
 
 export const ErrorHttpStatus: Record<ErrorCode, number> = {
@@ -66,6 +69,9 @@ export const ErrorHttpStatus: Record<ErrorCode, number> = {
   [ErrorCode.SERVER_ERROR]: 500,
   [ErrorCode.DATABASE_ERROR]: 500,
   [ErrorCode.SERVICE_UNAVAILABLE]: 503,
+
+  //not-found
+  [ErrorCode.NOT_FOUND]: 404,
 };
 
 export class AppError extends Error {

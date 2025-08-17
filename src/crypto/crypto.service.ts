@@ -18,10 +18,20 @@ export class CryptoService {
       spkSignature: string;
     },
   ) {
+    const uniqueName = `${userId}-${dto.name ?? 'web-' + navigator.userAgent}`;
+    const device = await this.prisma.device.findFirst({
+      where: {
+        name: uniqueName,
+      },
+    });
+    if (device) {
+      return device;
+    }
+
     return this.prisma.device.create({
       data: {
         userId,
-        name: dto.name ?? null,
+        name: uniqueName,
         identityKey: dto.identityKey,
         signedPreKey: dto.signedPreKey,
         spkSignature: dto.spkSignature,
