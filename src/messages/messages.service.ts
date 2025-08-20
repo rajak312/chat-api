@@ -52,6 +52,7 @@ export class MessagesService {
         contentType: dto.contentType ?? null,
         version: dto.version ?? 'v1',
         recipientDeviceId: dto.recipientDeviceId,
+        senderDeviceId: dto.senderDeviceId,
       },
       include: {
         sender: { select: { id: true, username: true } },

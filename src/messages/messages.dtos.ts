@@ -41,6 +41,12 @@ export class SendMessageDto {
     description: 'Sender ephemeral public key for session encryption',
   })
   senderEphemeralPublic?: string;
+
+  @IsString()
+  @ApiProperty({
+    description: 'Sender device Id',
+  })
+  senderDeviceId: string;
 }
 
 export class HistoryQueryDto {

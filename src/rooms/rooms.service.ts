@@ -26,7 +26,6 @@ export class RoomsService {
       data: { name: dto.name, isGroup: dto.isGroup },
     });
 
-    // Ensure creator is included
     const allMembers = dto.members.some((m) => m.userId === creatorId)
       ? dto.members
       : [{ userId: creatorId }, ...dto.members];
@@ -45,7 +44,9 @@ export class RoomsService {
       });
     }
 
-    return room;
+    return {
+      room,
+    };
   }
 
   async addMembers(
@@ -62,7 +63,6 @@ export class RoomsService {
       } | null;
     }>,
   ) {
-    // authorize requestor is a member
     const member = await this.prisma.roomUser.findFirst({
       where: { roomId, userId: requestorId },
     });

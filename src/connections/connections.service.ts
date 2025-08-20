@@ -96,13 +96,9 @@ export class ConnectionsService {
     if (status === 'rejected') {
       return this.prisma.connection.delete({ where: { id: connectionId } });
     } else if (status === 'accepted') {
-      // Optionally, you could set a "status" column in Connection instead of deleting/creating
-      // For now, just return the updated connection
       return this.prisma.connection.update({
         where: { id: connectionId },
-        data: {
-          /* add status field if needed */
-        },
+        data: {},
         include: {
           user: { select: { id: true, username: true } },
           connectedUser: { select: { id: true, username: true } },

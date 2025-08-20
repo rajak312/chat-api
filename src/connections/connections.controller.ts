@@ -8,10 +8,7 @@ import {
   Patch,
 } from '@nestjs/common';
 import { ConnectionsService } from './connections.service';
-import type {
-  CreateConnectionDto,
-  UpdateConnectionDto,
-} from './connections.dtos';
+import { CreateConnectionDto, UpdateConnectionDto } from './connections.dtos';
 import { Username } from 'src/decorators/username.decorator';
 import { Authenticate } from 'src/decorators/authenticate.decorator';
 
