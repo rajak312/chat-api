@@ -55,10 +55,6 @@ export class MessagesService {
         version: dto.version ?? 'v1',
         senderDeviceId: dto.senderDeviceId,
       },
-      include: {
-        sender: { select: { id: true, username: true } },
-        seenBy: true,
-      },
     });
 
     const wrappedKeysPayload = dto.wrappedKeys.map((wk) => ({
@@ -75,30 +71,40 @@ export class MessagesService {
 
     if (this.io) {
       const broadcastId = dto.id ?? targetId;
-      this.io
-        .to(broadcastId)
-        .emit('message_created', { messageId: message.id });
+
+      const fullMessage = await this.prisma.message.findUnique({
+        where: { id: message.id },
+        include: {
+          sender: { select: { id: true, username: true } },
+          seenBy: true,
+          wrappedKeys: {
+            select: { deviceId: true, encryptedKey: true },
+            where: { deviceId: dto.senderDeviceId },
+          },
+        },
+      });
+
+      this.io.to(broadcastId).emit('message_created', fullMessage);
 
       for (const wk of wrappedKeysPayload) {
         const deviceId = wk.deviceId;
-        const encryptedKey = wk.encryptedKey;
 
-        const perDevicePayload = {
-          messageId: message.id,
-          sender: message.sender,
-          senderDeviceId: message.senderDeviceId,
-          iv: message.iv,
-          ciphertext: message.ciphertext,
-          encryptedKey,
-          createdAt: message.createdAt,
-          contentType: message.contentType,
-          version: message.version,
-        };
+        const perDeviceMessage = await this.prisma.message.findUnique({
+          where: { id: message.id },
+          include: {
+            sender: { select: { id: true, username: true } },
+            seenBy: true,
+            wrappedKeys: {
+              where: { deviceId },
+              select: { id: true, deviceId: true, encryptedKey: true },
+            },
+          },
+        });
 
         const socketIds = this.getSocketIdsForDevice(deviceId);
         if (socketIds && socketIds.length) {
           for (const sid of socketIds) {
-            this.io.to(sid).emit('receive_message', perDevicePayload);
+            this.io.to(sid).emit('receive_message', perDeviceMessage);
           }
         }
       }
