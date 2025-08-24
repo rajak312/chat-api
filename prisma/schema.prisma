@@ -7,20 +7,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// -------------------- Devices & Keys --------------------
-model Device {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  user      User     @relation(fields: [userId], references: [id])
-  userId    String   @db.ObjectId
-  name      String   @unique
-  createdAt DateTime @default(now())
-
-  publicKey String
-  enabled   Boolean @default(true)
-
-  messages Message[]
-}
-
 // -------------------- Users & Auth --------------------
 model User {
   id          String   @id @default(auto()) @map("_id") @db.ObjectId
@@ -92,32 +78,66 @@ model RoomUser {
   deviceId         String? @db.ObjectId
 }
 
-// -------------------- Messages --------------------
+model Device {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String   @db.ObjectId
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  // long-term public key (SPKI Base64). Do NOT store plaintext private keys here unless encrypted.
+  publicKey String
+
+  enabled Boolean @default(true)
+
+  // relations
+  sentMessages     Message[]    @relation("DeviceSentMessages")
+  receivedMessages WrappedKey[] // wrapped keys point back to device
+}
+
 model Message {
   id String @id @default(auto()) @map("_id") @db.ObjectId
 
+  // Who sent it
   sender   User   @relation("UserSentMessages", fields: [senderId], references: [id])
   senderId String @db.ObjectId
 
-  senderDevice   Device @relation(fields: [senderDeviceId], references: [id])
+  // Which device was used to send
+  senderDevice   Device @relation("DeviceSentMessages", fields: [senderDeviceId], references: [id])
   senderDeviceId String @db.ObjectId
 
-  recipientDeviceId String @db.ObjectId
+  // Which recipient device this message record is intended for (optional if you store per-device messages)
+  // For fan-out design you may optionally store recipientDeviceId here if you create per-device Message entries.
+  // recipientDeviceId String? @db.ObjectId
 
-  // Encrypted content
+  // Encrypted content (the AES-GCM ciphertext & iv; we store one ciphertext per logical message)
   ciphertext            String
-  iv                    String?
-  authTag               String?
-  senderEphemeralPublic String?
+  iv                    String? // base64 IV (12 bytes)
+  authTag               String? // optional; AES-GCM tag is usually appended to ciphertext, not separate
+  senderEphemeralPublic String? // optional (for DH flows)
   version               String  @default("v1")
   contentType           String?
 
-  createdAt    DateTime      @default(now())
-  seenBy       MessageSeen[]
-  Connection   Connection?   @relation(fields: [connectionId], references: [id])
-  connectionId String?       @db.ObjectId
-  Room         Room?         @relation(fields: [roomId], references: [id])
-  roomId       String?       @db.ObjectId
+  createdAt DateTime      @default(now())
+  seenBy    MessageSeen[]
+
+  // Wrapped keys for each recipient device
+  wrappedKeys WrappedKey[]
+
+  Connection   Connection? @relation(fields: [connectionId], references: [id])
+  connectionId String?     @db.ObjectId
+  Room         Room?       @relation(fields: [roomId], references: [id])
+  roomId       String?     @db.ObjectId
+}
+
+model WrappedKey {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  message      Message  @relation(fields: [messageId], references: [id])
+  messageId    String   @db.ObjectId
+  device       Device   @relation(fields: [deviceId], references: [id])
+  deviceId     String   @db.ObjectId // <-- recipient device id
+  encryptedKey String
+  createdAt    DateTime @default(now())
 }
 
 // -------------------- Message Seen --------------------

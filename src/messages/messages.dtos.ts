@@ -1,14 +1,21 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsNumber, IsOptional, IsString } from 'class-validator';
+export class SendWrappedKeyDto {
+  @IsString()
+  @ApiProperty({ description: 'Device ID this wrapped key is for' })
+  deviceId!: string;
+
+  @IsString()
+  @ApiProperty({
+    description: 'AES session key encrypted with recipient device public key',
+  })
+  encryptedKey!: string;
+}
 
 export class SendMessageDto {
   @IsString()
   @ApiProperty({ description: 'Encrypted message text' })
   ciphertext!: string;
-
-  @IsString()
-  @ApiProperty({ description: 'sender device id' })
-  recipientDeviceId: string;
 
   @IsOptional()
   @IsString()
@@ -33,7 +40,7 @@ export class SendMessageDto {
   @IsOptional()
   @IsString()
   @ApiPropertyOptional({ description: 'Room ID or connection Id' })
-  id: string;
+  id?: string;
 
   @IsOptional()
   @IsString()
@@ -43,10 +50,11 @@ export class SendMessageDto {
   senderEphemeralPublic?: string;
 
   @IsString()
-  @ApiProperty({
-    description: 'Sender device Id',
-  })
-  senderDeviceId: string;
+  @ApiProperty({ description: 'Sender device Id' })
+  senderDeviceId!: string;
+
+  @ApiProperty({ type: [SendWrappedKeyDto] })
+  wrappedKeys!: SendWrappedKeyDto[];
 }
 
 export class HistoryQueryDto {
@@ -59,10 +67,4 @@ export class HistoryQueryDto {
   @IsOptional()
   @IsNumber()
   limit?: number;
-}
-
-export class MessageSeenDto {
-  @IsString()
-  @ApiProperty({ description: 'ID of the message being marked as seen' })
-  messageId!: string;
 }

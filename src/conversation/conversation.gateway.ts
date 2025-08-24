@@ -29,6 +29,7 @@ export class ConversationGateway
 {
   @WebSocketServer() server: Server;
   private userToSocket = new Map<string, string>();
+  private deviceToSockets = new Map<string, Set<string>>();
 
   constructor(
     private readonly messagesService: MessagesService,
@@ -62,6 +63,22 @@ export class ConversationGateway
     );
     this.userToSocket.delete(user.id);
     this.server.emit('online_users', Array.from(this.userToSocket.keys()));
+  }
+
+  @SubscribeMessage('register_device')
+  async registerDevice(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { deviceId: string },
+  ) {
+    if (!data.deviceId) return;
+    client.join(data.deviceId);
+
+    if (!this.deviceToSockets.has(data.deviceId)) {
+      this.deviceToSockets.set(data.deviceId, new Set());
+    }
+    this.deviceToSockets.get(data.deviceId)!.add(client.id);
+
+    console.log(`Device ${data.deviceId} registered with socket ${client.id}`);
   }
 
   @SubscribeMessage('send_message')

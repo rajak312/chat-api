@@ -9,6 +9,12 @@ export class DevicesService {
   async register(username: string, dto: CreateDeviceDto) {
     const user = await this.prisma.user.findUnique({ where: { username } });
     if (!user) throw new NotFoundException('User not found');
+    const device = await this.prisma.device.findUnique({
+      where: {
+        name: dto.name,
+      },
+    });
+    if (device) return device;
 
     return this.prisma.device.create({
       data: {

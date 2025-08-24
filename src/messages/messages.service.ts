@@ -7,7 +7,7 @@ import { ErrorCode } from 'src/core/errors/app-error';
 
 @Injectable()
 export class MessagesService {
-  private io: Server;
+  private io: Server | null = null;
 
   constructor(private prisma: PrismaService) {}
 
@@ -18,14 +18,10 @@ export class MessagesService {
   async send(senderId: string, targetId: string, dto: SendMessageDto) {
     assert(targetId, 'invalid input', ErrorCode.INVALID_INPUT);
 
-    console.log('CAlling Sedn', senderId);
-
     const roomMember = await this.prisma.roomUser.findFirst({
-      where: {
-        userId: senderId,
-        ...(dto.id ? { roomId: dto.id } : {}),
-      },
+      where: { userId: senderId, ...(dto.id ? { roomId: dto.id } : {}) },
     });
+
     const connection = await this.prisma.connection.findFirst({
       where: {
         id: dto.id ?? targetId,
@@ -39,19 +35,24 @@ export class MessagesService {
       ErrorCode.NOT_FOUND,
     );
 
-    // Create message
+    assert(
+      Array.isArray((dto as any).wrappedKeys) &&
+        (dto as any).wrappedKeys.length > 0,
+      'wrappedKeys (per-device) required',
+      ErrorCode.INVALID_INPUT,
+    );
+
     const message = await this.prisma.message.create({
       data: {
         roomId: dto.id ?? null,
         connectionId: dto.id ?? null,
         senderId,
         ciphertext: dto.ciphertext,
-        senderEphemeralPublic: dto.senderEphemeralPublic,
+        senderEphemeralPublic: dto.senderEphemeralPublic ?? null,
         iv: dto.iv ?? null,
         authTag: dto.authTag ?? null,
         contentType: dto.contentType ?? null,
         version: dto.version ?? 'v1',
-        recipientDeviceId: dto.recipientDeviceId,
         senderDeviceId: dto.senderDeviceId,
       },
       include: {
@@ -60,9 +61,47 @@ export class MessagesService {
       },
     });
 
+    const wrappedKeysPayload = dto.wrappedKeys.map((wk) => ({
+      messageId: message.id,
+      deviceId: wk.deviceId,
+      encryptedKey: wk.encryptedKey,
+    }));
+
+    if (wrappedKeysPayload.length) {
+      await this.prisma.wrappedKey.createMany({
+        data: wrappedKeysPayload,
+      });
+    }
+
     if (this.io) {
-      const broadcastId = dto.id ?? dto.id ?? targetId;
-      this.io.to(broadcastId).emit('receive_message', message);
+      const broadcastId = dto.id ?? targetId;
+      this.io
+        .to(broadcastId)
+        .emit('message_created', { messageId: message.id });
+
+      for (const wk of wrappedKeysPayload) {
+        const deviceId = wk.deviceId;
+        const encryptedKey = wk.encryptedKey;
+
+        const perDevicePayload = {
+          messageId: message.id,
+          sender: message.sender,
+          senderDeviceId: message.senderDeviceId,
+          iv: message.iv,
+          ciphertext: message.ciphertext,
+          encryptedKey,
+          createdAt: message.createdAt,
+          contentType: message.contentType,
+          version: message.version,
+        };
+
+        const socketIds = this.getSocketIdsForDevice(deviceId);
+        if (socketIds && socketIds.length) {
+          for (const sid of socketIds) {
+            this.io.to(sid).emit('receive_message', perDevicePayload);
+          }
+        }
+      }
     }
 
     return message;
@@ -77,9 +116,11 @@ export class MessagesService {
   ) {
     assert(targetId, 'invalid input', ErrorCode.INVALID_INPUT);
     assert(deviceId, 'please send your deviceId', ErrorCode.INVALID_INPUT);
+
     const roomMember = await this.prisma.roomUser.findFirst({
       where: { roomId: targetId, userId },
     });
+
     const connection = await this.prisma.connection.findFirst({
       where: {
         id: targetId,
@@ -93,28 +134,31 @@ export class MessagesService {
       ErrorCode.NOT_FOUND,
     );
 
-    console.log('id', deviceId);
-
-    return this.prisma.message.findMany({
+    const messages = await this.prisma.message.findMany({
       where: {
         AND: [
           { OR: [{ roomId: targetId }, { connectionId: targetId }] },
           {
-            OR: [{ recipientDeviceId: deviceId }, { senderId: userId }],
+            OR: [{ wrappedKeys: { some: { deviceId } } }, { senderId: userId }],
           },
         ],
       },
       include: {
         sender: { select: { id: true, username: true } },
         seenBy: true,
+        wrappedKeys: {
+          where: { deviceId },
+          select: { id: true, deviceId: true, encryptedKey: true },
+        },
       },
       orderBy: { createdAt: 'desc' },
       take: typeof limit === 'string' ? parseInt(limit) : limit,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     });
+
+    return messages;
   }
 
-  // Mark a message as seen
   async markSeen(messageId: string, userId: string) {
     const existing = await this.prisma.messageSeen.findFirst({
       where: { messageId, userId },
@@ -125,7 +169,6 @@ export class MessagesService {
       data: { messageId, userId },
     });
 
-    // Emit WebSocket event
     if (this.io) {
       const message = await this.prisma.message.findUnique({
         where: { id: messageId },
@@ -138,5 +181,12 @@ export class MessagesService {
     }
 
     return seen;
+  }
+
+  private getSocketIdsForDevice(deviceId: string): string[] {
+    if (!this.io) return [];
+    const room = this.io.sockets.adapter.rooms.get(deviceId);
+    if (!room) return [];
+    return Array.from(room) as string[];
   }
 }
